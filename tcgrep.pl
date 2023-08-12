@@ -47,6 +47,10 @@ License: perl
 # Add support for bzip2 and zip files
 # File names are printed by default when using -r and supplying no directory
 # v1.7: Thu May 27 00:25:30 BST 1999
+#
+# Revision by Ulrich Steinmann <usteinmann@gmx.de>
+# Support globbing for Windows
+# v1.7-p1: Tue May 09 18:31:46 2017
 
 use strict;
 				  # globals
@@ -271,7 +275,11 @@ sub matchfile {
     local($_);
     $total = 0;
 
-FILE: while (defined ($file = shift(@_))) {
+    # support globbing for Windows
+    my @args = ($^O eq 'MSWin32') ? map {glob} @_ : @_;
+
+FILE: while (defined ($file = shift(@args))) {
+	$Mult = 1 if (@args > 0);
 
 	if (-d $file) {
 	    if (-l $file && @ARGV != 1) {
