@@ -51,6 +51,10 @@ License: perl
 # Revision by Ulrich Steinmann <usteinmann@gmx.de>
 # Support globbing for Windows
 # v1.7-p1: Tue May 09 18:31:46 2017
+#
+# Revision by Ulrich Steinmann <usteinmann@gmx.de>
+# Changes for uncompressing
+# v1.7-p2: Thu May 11 10:58:22 2017
 
 use strict;
 				  # globals
@@ -78,10 +82,10 @@ sub init {
     $| = 1;                       # autoflush output
 
     %Compress = (                 # file extensions and program names
-	z   => 'zcat <',          # for uncompressing
-	gz  => 'zcat <',
-	Z   => 'zcat <',
-	bz2 => 'bzcat <',
+	z   => 'gzip -d -c',      # for uncompressing
+	gz  => 'gzip -d -c',
+	Z   => 'gzip -d -c',
+	bz2 => 'bzip2 -d -c',
 	zip => 'unzip -c',
     );
 }
