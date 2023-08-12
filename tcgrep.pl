@@ -1,5 +1,9 @@
 #!/usr/bin/perl -w
-#
+
+###
+### DON'T FORGET TO UPDATE THE POD IF YOU ADD TO THE HISTORY!!!
+###
+
 # tcgrep: tom christiansen's rewrite of grep
 # v1.0: Thu Sep 30 16:24:43 MDT 1993
 # v1.1: Fri Oct  1 08:33:43 MDT 1993
@@ -16,6 +20,10 @@
 # Revision by Paul Grassie <grassie@worldnet.att.net>
 # Removed vestiges of Perl4, made strict
 # v1.4: Mon May 18 16:17:48 EDT 1998
+#
+# Revision by Greg Bacon <gbacon@cs.uah.edu>
+# Add fgrep functionality for PPT
+# v1.5: Mon Mar  8 12:05:29 CST 1999
 
 use strict;
 				  # globals
@@ -68,6 +76,7 @@ Standard grep options:
 	e   expression (for exprs beginning with -)
 	f   file with expressions
 	l   list filenames matching
+	F   search for fixed strings (disable regular expressions)
 
 Specials:
 	1   1 match per file
@@ -98,7 +107,7 @@ sub parse_args {
 	unshift(@ARGV, $_);       # add TCGREP opt string to @ARGV
     }
 
-    $optstring = "incCwsxvhe:f:l1HurtpP:aqT";
+    $optstring = "incCwsxvhe:f:l1HurtpP:aqTF";
 
     $zeros = 'inCwxvhelut';       # options to init to 0 (prevent warnings)
     $nulls = 'pP';                # options to init to "" (prevent warnings)
@@ -108,23 +117,41 @@ sub parse_args {
 
     getopts($optstring, \%opt)		or usage();
 
+    my $no_re = $opt{F} || ($Me =~ /\bfgrep\b/);
+
     if ($opt{f}) {                # -f patfile
 	open(PATFILE, $opt{f})		or die qq($Me: Can't open '$opt{f}': $!);
 
 				  # make sure each pattern in file is valid
 	while ( defined($pattern = <PATFILE>) ) {
 	    chomp $pattern;
-	    eval { 'foo' =~ /$pattern/, 1 } or
-		die "$Me: $opt{f}:$.: bad pattern: $@";
+            unless ($no_re) {
+	        eval { 'foo' =~ /$pattern/, 1 } or
+		    die "$Me: $opt{f}:$.: bad pattern: $@";
+            }
 	    push @patterns, $pattern;
 	}
 	close PATFILE;
     }
     else {                        # make sure pattern is valid
 	$pattern = $opt{e} || shift(@ARGV) || usage();
-	eval { 'foo' =~ /$pattern/, 1 } or
-	    die "$Me: bad pattern: $@";
+        unless ($no_re) {
+	    eval { 'foo' =~ /$pattern/, 1 } or
+	        die "$Me: bad pattern: $@";
+        }
 	@patterns = ($pattern);
+    }
+
+    if ($no_re) {
+        for (@patterns) {
+            # XXX: quotemeta?
+            s/(\W)/\\$1/g;
+        }
+    }
+
+    # mumble mumble DeMorgan mumble mumble
+    if ($opt{v}) {
+        @patterns = join '|', map "(?:$_)", @patterns;
     }
 
     if ($opt{H} || $opt{u}) {     # highlight or underline
@@ -330,3 +357,256 @@ LINE:  while (<FILE>) {
     }
     $Grand_Total += $total;
 }
+
+__END__
+
+=pod
+
+=head1 NAME
+
+B<tcgrep> - search for regular expressions and print
+
+=head1 SYNOPSIS
+
+B<tcgrep> [ B<-[incCwsxvhlF1HurtpaqT]> ] [ B<-e> I<pattern> ]
+[ B<-f> I<pattern-file> ] [ B<-P> I<sep> ] [ I<pattern> ] [ I<files> ... ]
+
+=head1 DESCRIPTION
+
+B<tcgrep> searches for lines (or, optionally, paragraphs) in files
+that satisfy the criteria specified by the user-supplied patterns.
+Because B<tcgrep> is a Perl program, the user has full access to
+Perl's rich regular expression engine.  See L<perlre>.
+
+The first argument after the options (assuming the user did not specify
+the B<-e> option or the B<-f> option) is taken as I<pattern>.
+If the user does not supply a list of file or directory names to
+search, B<tcgrep> will attempt to search its standard input.
+
+With no arguments, B<tcgrep> will output its option list and exit.
+
+=head1 OPTIONS
+
+B<tcgrep> accepts these options:
+
+=over 4
+
+=item B<-1>
+
+Allow at most one match per file.
+
+=item B<-a>
+
+Search all files.  The default is to only search plain text files
+and compressed files.
+
+=item B<-C>
+
+Output the count of the matching lines or paragraphs.  This is similar
+to the B<-c> option (in fact, it implies the B<-c> option), except more
+than one match is possible in each line or paragraph.
+
+=item B<-c>
+
+Output the count of the matching lines or paragraphs.
+
+=item B<-e> I<pattern>
+
+Treat I<pattern> as a pattern.  This option is most useful when
+I<pattern> starts with a C<-> and the user wants to avoid confusing
+the option parser.
+
+The B<-f> option supercedes the B<-e> option.
+
+=item B<-F>
+
+B<fgrep> mode.  Disable regular expressions and perform Boyer-Moore
+searches.  (Whether it lives up to the 'f' in B<fgrep> is another
+issue).
+
+=item B<-f> I<pattern-file>
+
+Treat I<pattern-file> as a newline-separated list of patterns to use
+as search criteria.
+
+the B<-f> option supercedes the B<-e> option.
+
+=item B<-H>
+
+Highlight matches.  This option causes B<tcgrep> to attempt to use
+your terminal's stand-out (emboldening) functionality to highlight
+those portions of each matching line or paragraph that actually
+triggered the match.  This feature is very similar to the way the
+less(1) pager highlights matches.  See also B<-u>.
+
+=item B<-h>
+
+Hide filenames.  Only print matching lines or paragraphs.
+
+=item B<-i>
+
+Ignore case while matching.  This means, for example, that the pattern
+C<unix> would match C<unix> as well as C<UniX> (plus the other fourteen
+possible capitalizations).  This corresponds to the C</i> Perl regular
+expression switch.  See L<perlre>.
+
+=item B<-l>
+
+List files containing matches.  This option tells B<tcgrep> not to
+print any matches but only the names of the files containing matches.
+This option implies the B<-1> option.
+
+=item B<-n>
+
+Number lines or paragraphs.  Before outputting a given match, B<tcgrep>
+will first output its line or paragraph number corresponding to the
+value of the Perl magic scalar $. (whose documentation is in L<perlvar>).
+
+=item B<-P> I<sep>
+
+Put B<tcgrep> in paragraph mode, and use I<sep> as the paragraph
+separator.  This is implemented by assigning I<sep> to Perl's magic
+$/ scalar.  See L<perlvar>.
+
+=item B<-p>
+
+Paragraph mode.  This causes B<tcgrep> to set Perl's magic $/ to C<''>.
+(Note that the default is to process files in line mode.)  See L<perlvar>.
+
+=item B<-q>
+
+Quiet mode.  Suppress diagnostic messages to the standard error.  See
+B<-s>.
+
+=item B<-r>
+
+Recursively scan directories.  This option causes B<tcgrep> to
+descend directories in a left-first, depth-first manner and search
+for matches in the files of each directory it encounters.  The
+presence of B<-r> implies a file argument of F<.>, the current
+directory, if the user does not provide filenames on the command line.
+See L<"EXAMPLES">.
+
+=item B<-s>
+
+Silent mode.  Do not write to the standard output.  This option would
+be useful from a shell script, for example, if you are only interested
+in whether or not there exists a match for a pattern.  See also B<-q>.
+
+=item B<-T>
+
+Trace files as processed.  This causes B<tcgrep> to send diagnostic
+messages to the standard error when skipping symbolic links to directories,
+when skipping directories because the user did not give the B<-r> switch,
+when skipping non-plain files (see L<perlfunc/-f>),
+when skipping non-text files (see L<perlfunc/-T>), and
+when opening a file for searching
+
+=item B<-t>
+
+Process directories in C<`ls -t`> order.  Search the files in each
+directory starting with the most recently modified and ending with
+the least recently modified.
+
+=item B<-u>
+
+Underline matches.  This option causes B<tcgrep> to attempt to use
+your terminal's underline functionality to underline those portions of
+each matching line or paragraph that actually triggered the match.
+See also B<-H>.
+
+=item B<-v>
+
+Invert the sense of the match, i.e. print those lines or paragraphs
+that do B<not> match.  When using this option in conjunction with B<-f>,
+keep in mind that the entire set of patterns are grouped together in
+one pattern for the purposes of negation.  See L<"EXAMPLES">.
+
+=item B<-w>
+
+Matches must start and end at word boundaries.  This is currently
+implemented by surrounding each pattern with a pair of C<\b>, the
+Perl regular expression word boundary metasequence.  See L<perlre>
+for the precise definition of C<\b>.
+
+=item B<-x>
+
+Exact matches only.  The pattern must match the entire line or paragraph.
+
+=back
+
+=head1 ENVIRONMENT
+
+The user's TCGREP environment variable is taken as the default set of
+options to B<tcgrep>.
+
+=head1 EXAMPLES
+
+Search all files under F</etc/init.d> for a particular pattern:
+
+    % tcgrep -r tcgrep /etc/init.d
+
+Use of B<-v> and B<-f> options in conjunction with one another:
+
+    % cat fruits
+    pomme
+    banane
+    poire
+    % cat pats
+    pomme
+    poire
+    % tcgrep -vf pats fruits
+    banane
+
+=head1 TODO
+
+=over 4
+
+=item *
+
+Add more cool examples. :-)
+
+=item *
+
+Perhaps allow the user to provide an exclusion pattern for skipping over
+files whose names match the pattern.
+
+=back
+
+=head1 REVISION HISTORY
+
+    tcgrep: tom christiansen's rewrite of grep
+    v1.0: Thu Sep 30 16:24:43 MDT 1993
+    v1.1: Fri Oct  1 08:33:43 MDT 1993
+
+    Revision by Greg Bacon <gbacon@cs.uah.edu>
+    Fixed up highlighting for those of us trapped in terminfo
+    implemented -f
+    v1.2: Fri Jul 26 13:37:02 CDT 1996
+
+    Revision by Greg Bacon <gbacon@cs.uah.edu>
+    Avoid super-inefficient matching (almost twice as fast! :-)
+    v1.3: Sat Aug 30 14:21:47 CDT 1997
+
+    Revision by Paul Grassie <grassie@worldnet.att.net>
+    Removed vestiges of Perl4, made strict
+    v1.4: Mon May 18 16:17:48 EDT 1998
+
+    Revision by Greg Bacon <gbacon@cs.uah.edu>
+    Add fgrep functionality for PPT
+    v1.5: Mon Mar  8 12:05:29 CST 1999
+
+=head1 AUTHOR
+
+B<tcgrep> was written by Tom Christiansen with updates by Greg Bacon
+and Paul Grassie.
+
+=head1 COPYRIGHT and LICENSE
+
+Copyright (c) 1993-1999. Tom Christiansen.
+
+This program is free and open software. You may use, copy, modify, distribute,
+and sell this program (and any modified variants) in any way you wish,
+provided you do not restrict others from doing the same.
+
+=cut
